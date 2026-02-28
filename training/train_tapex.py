@@ -1,6 +1,6 @@
 import torch
 from torch.optim import AdamW
-from transformers import TapexTokenizer
+from transformers import AutoTokenizer
 from models.conditioned_tapex import ConditionedTapex
 from models.sketch_model import SketchModel
 from data.load_tatqa import load_tatqa
@@ -11,7 +11,7 @@ from data.load_tatqa import load_tatqa
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
-tokenizer = TapexTokenizer.from_pretrained(
+tokenizer = AutoTokenizer.from_pretrained(
     "microsoft/tapex-large-finetuned-wtq"
 )
 
