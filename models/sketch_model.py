@@ -2,35 +2,26 @@ import torch
 from torch import nn
 from transformers import AutoModel
 
-# --------------------
-# Sketch label spaces
-# --------------------
-OPS = ["ADD", "SUB", "AVG", "COUNT", "NONE"]
-SCALES = ["NONE", "THOUSAND", "MILLION", "PERCENT"]
-TYPES = ["NUMBER", "SPAN", "BOOLEAN"]
-
 
 class SketchModel(nn.Module):
     """
-    Multi-head sketch predictor:
-    - Operation
-    - Scale
-    - Answer Type
+    Latent Sketch Encoder (Stage 2 only)
+
+    - NO explicit operation / scale / type labels
+    - NO rule-based supervision
+    - Trained end-to-end via TAPEX answer loss
+    - CLS embedding is treated as the latent sketch
     """
 
-    def __init__(self, encoder_name="bert-large-uncased"):
+    def __init__(self, encoder_name: str = "bert-large-uncased"):
         super().__init__()
 
         self.encoder = AutoModel.from_pretrained(encoder_name)
-        hidden = self.encoder.config.hidden_size
-
-        self.op_head = nn.Linear(hidden, len(OPS))
-        self.scale_head = nn.Linear(hidden, len(SCALES))
-        self.type_head = nn.Linear(hidden, len(TYPES))
+        self.hidden_size = self.encoder.config.hidden_size
 
     def forward(self, input_ids, attention_mask, **kwargs):
         """
-        **kwargs is IMPORTANT to safely ignore token_type_ids
+        Accepts **kwargs to safely ignore token_type_ids
         """
 
         outputs = self.encoder(
@@ -38,11 +29,7 @@ class SketchModel(nn.Module):
             attention_mask=attention_mask
         )
 
-        # CLS representation
-        cls = outputs.last_hidden_state[:, 0]
+        # CLS token embedding = latent sketch vector
+        sketch_embedding = outputs.last_hidden_state[:, 0]
 
-        return {
-            "op": self.op_head(cls),
-            "scale": self.scale_head(cls),
-            "type": self.type_head(cls)
-        }
+        return sketch_embedding

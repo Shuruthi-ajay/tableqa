@@ -1,22 +1,54 @@
-from transformers import T5Tokenizer, AutoModelForSeq2SeqLM
+import torch
+from torch import nn
+from transformers import TapexForConditionalGeneration
 
-CONTROL_TOKENS = [
-    "<ANS_NUM>", "<ANS_SPAN>",
-    "<OP_ADD>", "<OP_SUB>", "<OP_AVG>",
-    "<SCALE_NONE>", "<SCALE_K>", "<SCALE_M>", "<SCALE_P>"
-]
+class ConditionedTapex(nn.Module):
+    """
+    TAPEX conditioned via learned sketch prefix embeddings
+    """
 
-tokenizer = T5Tokenizer.from_pretrained("microsoft/tapex-large", legacy=False)
-tokenizer.add_tokens(CONTROL_TOKENS)
+    def __init__(self, sketch_dim=768, num_sketch_tokens=3):
+        super().__init__()
 
-model = AutoModelForSeq2SeqLM.from_pretrained("microsoft/tapex-large")
-model.resize_token_embeddings(len(tokenizer))
+        self.tapex = TapexForConditionalGeneration.from_pretrained(
+            "microsoft/tapex-large-finetuned-wtq"
+        )
 
-def encode_input(question, table, sketch):
-    prefix = (
-        f"<ANS_{sketch['type']}> "
-        f"<OP_{sketch['op']}> "
-        f"<SCALE_{sketch['scale']}> "
-    )
-    text = prefix + "Question: " + question + " Table: " + table.to_string(index=False)
-    return tokenizer(text, return_tensors="pt", truncation=True)
+        self.sketch_proj = nn.Linear(sketch_dim, 
+                                     self.tapex.config.d_model)
+
+        self.num_sketch_tokens = num_sketch_tokens
+
+    def forward(
+        self,
+        input_ids,
+        attention_mask,
+        sketch_emb,
+        labels=None
+    ):
+        """
+        sketch_emb: (B, sketch_dim)
+        """
+
+        B = sketch_emb.size(0)
+
+        # project sketch → TAPEX space
+        sketch_tokens = self.sketch_proj(sketch_emb)
+        sketch_tokens = sketch_tokens.unsqueeze(1)
+        sketch_tokens = sketch_tokens.repeat(1, self.num_sketch_tokens, 1)
+
+        # prepend sketch tokens
+        inputs_embeds = self.tapex.model.encoder.embed_tokens(input_ids)
+        inputs_embeds = torch.cat([sketch_tokens, inputs_embeds], dim=1)
+
+        # extend attention mask
+        sketch_mask = torch.ones(
+            B, self.num_sketch_tokens, device=input_ids.device
+        )
+        attention_mask = torch.cat([sketch_mask, attention_mask], dim=1)
+
+        return self.tapex(
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            labels=labels
+        )
