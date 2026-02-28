@@ -1,6 +1,6 @@
 import torch
 from torch.optim import AdamW
-from transformers import AutoTokenizer
+from transformers import AutoModelForSeq2SeqLM
 from models.conditioned_tapex import ConditionedTapex
 from models.sketch_model import SketchModel
 from data.load_tatqa import load_tatqa

@@ -1,21 +1,24 @@
 import torch
 from torch import nn
-from transformers import TapexForConditionalGeneration
+from transformers import AutoModelForSeq2SeqLM
+
 
 class ConditionedTapex(nn.Module):
     """
-    TAPEX conditioned via learned sketch prefix embeddings
+    TAPEX via generic Seq2Seq interface (Transformers v5+ compatible)
     """
 
-    def __init__(self, sketch_dim=768, num_sketch_tokens=3):
+    def __init__(self, sketch_dim=1024, num_sketch_tokens=3):
         super().__init__()
 
-        self.tapex = TapexForConditionalGeneration.from_pretrained(
+        self.tapex = AutoModelForSeq2SeqLM.from_pretrained(
             "microsoft/tapex-large-finetuned-wtq"
         )
 
-        self.sketch_proj = nn.Linear(sketch_dim, 
-                                     self.tapex.config.d_model)
+        self.sketch_proj = nn.Linear(
+            sketch_dim,
+            self.tapex.config.d_model
+        )
 
         self.num_sketch_tokens = num_sketch_tokens
 
@@ -26,26 +29,29 @@ class ConditionedTapex(nn.Module):
         sketch_emb,
         labels=None
     ):
-        """
-        sketch_emb: (B, sketch_dim)
-        """
-
         B = sketch_emb.size(0)
 
-        # project sketch → TAPEX space
+        # Project sketch → TAPEX hidden space
         sketch_tokens = self.sketch_proj(sketch_emb)
         sketch_tokens = sketch_tokens.unsqueeze(1)
         sketch_tokens = sketch_tokens.repeat(1, self.num_sketch_tokens, 1)
 
-        # prepend sketch tokens
-        inputs_embeds = self.tapex.model.encoder.embed_tokens(input_ids)
-        inputs_embeds = torch.cat([sketch_tokens, inputs_embeds], dim=1)
+        # Original embeddings
+        inputs_embeds = self.tapex.get_input_embeddings()(input_ids)
 
-        # extend attention mask
-        sketch_mask = torch.ones(
-            B, self.num_sketch_tokens, device=input_ids.device
+        # Prefix sketch tokens
+        inputs_embeds = torch.cat(
+            [sketch_tokens, inputs_embeds], dim=1
         )
-        attention_mask = torch.cat([sketch_mask, attention_mask], dim=1)
+
+        # Extend attention mask
+        sketch_mask = torch.ones(
+            B, self.num_sketch_tokens,
+            device=input_ids.device
+        )
+        attention_mask = torch.cat(
+            [sketch_mask, attention_mask], dim=1
+        )
 
         return self.tapex(
             inputs_embeds=inputs_embeds,
