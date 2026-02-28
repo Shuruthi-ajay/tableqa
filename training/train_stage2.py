@@ -30,7 +30,7 @@ optimizer = AdamW(model.parameters(), lr=1e-5)
 # Load data
 # --------------------
 train_data = load_tatqa(
-    "TAT-QA/dataset_raw/tatqa_dataset_train.json",
+    "../TAT-QA/dataset_raw/tatqa_dataset_train.json",
     split="train"
 )
 
