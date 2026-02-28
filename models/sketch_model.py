@@ -9,7 +9,7 @@ class SketchModel(nn.Module):
 
     - NO explicit operation / scale / type labels
     - NO rule-based supervision
-    - Trained end-to-end via TAPEX answer loss
+    - Trained end-to-end via answer generation loss
     - CLS embedding is treated as the latent sketch
     """
 
