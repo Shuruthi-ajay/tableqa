@@ -15,7 +15,7 @@ print("Using device:", device)
 # --------------------
 sketch_model = SketchModel().to(device)
 sketch_model.load_state_dict(
-    torch.load("sketch_model.pt", map_location=device)
+    torch.load("sketch_model.py", map_location=device)
 )
 sketch_model.eval()
 
