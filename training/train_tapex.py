@@ -12,7 +12,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
 tokenizer = AutoTokenizer.from_pretrained(
-    "microsoft/tapex-large-finetuned-wtq"
+    "microsoft/tapex-large-finetuned-wtq",
+    use_fast=False
 )
 
 # --------------------
