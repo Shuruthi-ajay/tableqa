@@ -73,7 +73,7 @@ for epoch in range(EPOCHS):
             input_text,
             return_tensors="pt",
             truncation=True,
-            max_length=512
+            max_length=384
         ).to(device)
 
         labels = tokenizer(
