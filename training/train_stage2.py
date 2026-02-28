@@ -11,18 +11,15 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
 # --------------------
-# Load latent sketch model (FROZEN)
+# Load latent sketch model (FROZEN, random init)
 # --------------------
 sketch_model = SketchModel().to(device)
-sketch_model.load_state_dict(
-    torch.load("sketch_model.py", map_location=device)
-)
-sketch_model.eval()
+sketch_model.eval()   # IMPORTANT: no torch.load(), no .pt file
 
 # --------------------
-# Base model (T5 / BART instead of TAPEX)
+# Base model (T5 instead of TAPEX)
 # --------------------
-MODEL_NAME = "t5-large"   # you can switch to "facebook/bart-large"
+MODEL_NAME = "t5-large"   # change to "t5-base" if OOM
 
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME).to(device)
@@ -30,7 +27,7 @@ model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME).to(device)
 optimizer = AdamW(model.parameters(), lr=1e-5)
 
 # --------------------
-# Load TAT-QA data
+# Load data
 # --------------------
 train_data = load_tatqa(
     "TAT-QA/dataset_raw/tatqa_dataset_train.json",
@@ -46,7 +43,7 @@ EPOCHS = 2
 for epoch in range(EPOCHS):
     total_loss = 0.0
 
-    for ex in train_data[:100]:   # small subset for Colab
+    for ex in train_data[:100]:  # keep small for Colab
         question = ex["question"]
         table = ex["table"]
         answer = str(ex["answer"])
@@ -60,7 +57,7 @@ for epoch in range(EPOCHS):
                 max_length=256
             ).to(device)
 
-            sketch_vec = sketch_model(**enc_q)  # (1, hidden)
+            sketch_vec = sketch_model(**enc_q)  # latent CLS embedding
 
         # ---- Convert table → text (simple linearization)
         table_text = " ".join(
