@@ -1,6 +1,7 @@
 import torch
 from torch.optim import AdamW
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
 from models.sketch_model import SketchModel
 from data.load_tatqa import load_tatqa
 
@@ -11,7 +12,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
 # --------------------
-# Tokenizers (IMPORTANT)
+# Tokenizers (DO NOT MIX THESE)
 # --------------------
 bert_tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 t5_tokenizer = AutoTokenizer.from_pretrained("t5-base")
@@ -25,7 +26,7 @@ for p in sketch_model.parameters():
     p.requires_grad = False
 
 # --------------------
-# Generator model (T5)
+# Generator model (T5-base)
 # --------------------
 model = AutoModelForSeq2SeqLM.from_pretrained("t5-base").to(device)
 optimizer = AdamW(model.parameters(), lr=1e-5)
@@ -47,12 +48,12 @@ EPOCHS = 2
 for epoch in range(EPOCHS):
     total_loss = 0.0
 
-    for ex in train_data[:100]:  # small for Colab
+    for ex in train_data[:100]:  # small subset for Colab
         question = ex["question"]
         table = ex["table"]
         answer = str(ex["answer"])
 
-        # ---- Sketch encoding (BERT tokenizer!)
+        # ---- Sketch encoding (BERT tokenizer ONLY)
         with torch.no_grad():
             enc_q = bert_tokenizer(
                 question,
@@ -73,6 +74,7 @@ for epoch in range(EPOCHS):
 
         input_text = f"question: {question} table: {table_text}"
 
+        # ---- T5 encoding
         enc = t5_tokenizer(
             input_text,
             return_tensors="pt",
@@ -87,7 +89,7 @@ for epoch in range(EPOCHS):
             max_length=64
         ).input_ids.to(device)
 
-        # ---- Forward
+        # ---- Forward + backward
         outputs = model(
             input_ids=enc["input_ids"],
             attention_mask=enc["attention_mask"],
@@ -101,7 +103,7 @@ for epoch in range(EPOCHS):
 
         total_loss += loss.item()
 
-    print(f"Epoch {epoch+1} | Loss: {total_loss:.3f}")
+    print(f"Epoch {epoch + 1} | Loss: {total_loss:.3f}")
 
 # --------------------
 # Save model
