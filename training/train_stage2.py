@@ -54,6 +54,7 @@ for epoch in range(EPOCHS):
         answer = str(ex["answer"])
 
         # ---- Sketch encoding (BERT tokenizer ONLY)
+        # ---- Sketch encoding (BERT tokenizer!)
         with torch.no_grad():
             enc_q = bert_tokenizer(
                 question,
