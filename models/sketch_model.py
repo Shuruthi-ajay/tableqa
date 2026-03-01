@@ -9,11 +9,11 @@ class SketchModel(nn.Module):
 
     - NO explicit operation / scale / type labels
     - NO rule-based supervision
-    - Trained end-to-end via answer generation loss
+    - Used as a frozen latent encoder
     - CLS embedding is treated as the latent sketch
     """
 
-    def __init__(self, encoder_name: str = "bert-large-uncased"):
+    def __init__(self, encoder_name: str = "bert-base-uncased"):
         super().__init__()
 
         self.encoder = AutoModel.from_pretrained(encoder_name)

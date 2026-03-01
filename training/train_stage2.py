@@ -1,3 +1,6 @@
+import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
 import torch
 from torch.optim import AdamW
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
@@ -11,15 +14,18 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
 # --------------------
-# Load latent sketch model (FROZEN, random init)
+# Load latent sketch model (FROZEN)
 # --------------------
 sketch_model = SketchModel().to(device)
-sketch_model.eval()   # IMPORTANT: no torch.load(), no .pt file
+sketch_model.eval()
+
+for p in sketch_model.parameters():
+    p.requires_grad = False
 
 # --------------------
-# Base model (T5 instead of TAPEX)
+# Base model (MEDIUM level, GPU‑safe)
 # --------------------
-MODEL_NAME = "t5-large"   # change to "t5-base" if OOM
+MODEL_NAME = "t5-base"
 
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME).to(device)
@@ -27,7 +33,7 @@ model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME).to(device)
 optimizer = AdamW(model.parameters(), lr=1e-5)
 
 # --------------------
-# Load data
+# Load TAT-QA data (Colab path)
 # --------------------
 train_data = load_tatqa(
     "../TAT-QA/dataset_raw/tatqa_dataset_train.json",
@@ -43,7 +49,7 @@ EPOCHS = 2
 for epoch in range(EPOCHS):
     total_loss = 0.0
 
-    for ex in train_data[:100]:  # keep small for Colab
+    for ex in train_data[:100]:  # keep small for Colab demo
         question = ex["question"]
         table = ex["table"]
         answer = str(ex["answer"])
@@ -57,11 +63,11 @@ for epoch in range(EPOCHS):
                 max_length=256
             ).to(device)
 
-            sketch_vec = sketch_model(**enc_q)  # latent CLS embedding
+            sketch_vec = sketch_model(**enc_q)
 
-        # ---- Convert table → text (simple linearization)
-        table_text = " ".join(
-            [" ".join(map(str, row)) for row in table[:5]]
+        # ---- Convert table → text
+        table_text = " ; ".join(
+            [" | ".join(map(str, row)) for row in table[:5]]
         )
 
         input_text = (
@@ -95,7 +101,7 @@ for epoch in range(EPOCHS):
     print(f"Epoch {epoch + 1} | Loss: {total_loss:.3f}")
 
 # --------------------
-# Save model
+# Save model (local only)
 # --------------------
 model.save_pretrained("stage2_model")
 tokenizer.save_pretrained("stage2_model")
