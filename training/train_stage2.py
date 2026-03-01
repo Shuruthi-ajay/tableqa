@@ -17,6 +17,7 @@ tokenizer = AutoTokenizer.from_pretrained("t5-base")
 
 # --------------------
 # Sketch model (T5 encoder + pooling, frozen)
+# NOTE: computed but NOT injected (kept for architecture completeness)
 # --------------------
 sketch_model = SketchModel("t5-base").to(device)
 sketch_model.eval()
@@ -41,17 +42,17 @@ train_data = load_tatqa(
 # Training
 # --------------------
 model.train()
-EPOCHS = 5   # ⬅ increased
+EPOCHS = 5
 
 for epoch in range(EPOCHS):
     total_loss = 0.0
 
-    for ex in train_data[:500]:   # ⬅ more data if possible
+    for ex in train_data[:500]:
         question = ex["question"]
         table = ex["table"]
         answer = str(ex["answer"])
 
-        # ---- Sketch encoding (T5 encoder)
+        # ---- (Optional) sketch encoding (NOT used further)
         with torch.no_grad():
             enc_q = tokenizer(
                 question,
@@ -60,20 +61,19 @@ for epoch in range(EPOCHS):
                 max_length=128
             ).to(device)
 
-            sketch_vec = sketch_model(
+            _ = sketch_model(
                 input_ids=enc_q["input_ids"],
                 attention_mask=enc_q["attention_mask"]
             )
 
-        # ---- BETTER table linearization
+        # ---- Better table linearization
         table_text = " ; ".join(
             [f"row{i}: " + " | ".join(map(str, row))
              for i, row in enumerate(table[:5])]
         )
 
-        # ---- SOFT SKETCH INJECTION (key change)
+        # ---- CLEAN input (NO sketch text, NO duplication)
         input_text = (
-            f"sketch: {question} "
             f"question: {question} "
             f"table: {table_text}"
         )
@@ -93,9 +93,10 @@ for epoch in range(EPOCHS):
             max_length=64
         ).input_ids.to(device)
 
-        # ---- mask padding (VERY important)
+        # ---- Mask padding tokens
         labels[labels == tokenizer.pad_token_id] = -100
 
+        # ---- Forward + backward
         outputs = model(
             input_ids=enc["input_ids"],
             attention_mask=enc["attention_mask"],
@@ -109,7 +110,7 @@ for epoch in range(EPOCHS):
 
         total_loss += loss.item()
 
-    print(f"Epoch {epoch+1} | Loss: {total_loss:.2f}")
+    print(f"Epoch {epoch + 1} | Loss: {total_loss:.2f}")
 
 # --------------------
 # Save model
