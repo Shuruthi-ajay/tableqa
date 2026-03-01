@@ -110,7 +110,8 @@ for epoch in range(EPOCHS):
 
         total_loss += loss.item()
 
-    print(f"Epoch {epoch + 1} | Loss: {total_loss:.2f}")
+    avg_loss = total_loss / len(train_data[:500])
+    print(f"Epoch {epoch + 1} | Avg Loss: {avg_loss:.4f}")
 
 # --------------------
 # Save model
