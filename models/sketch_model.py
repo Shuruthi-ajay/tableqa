@@ -5,8 +5,8 @@ from transformers import AutoModel
 
 class SketchModel(nn.Module):
     """
-    Latent sketch encoder using T5 encoder + mean pooling.
-    NOTE: In the final system this is NOT injected, only kept for completeness.
+    T5 encoder + mean pooling.
+    Not used in final generation, kept for architecture completeness.
     """
 
     def __init__(self, model_name="t5-base"):
@@ -19,11 +19,7 @@ class SketchModel(nn.Module):
             attention_mask=attention_mask
         )
 
-        # (batch, seq_len, hidden)
         hidden = outputs.last_hidden_state
-
-        # mean pooling with mask
         mask = attention_mask.unsqueeze(-1).float()
         pooled = (hidden * mask).sum(dim=1) / mask.sum(dim=1)
-
         return pooled

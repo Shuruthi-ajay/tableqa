@@ -5,30 +5,25 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 from data.load_tatqa import load_tatqa
 from data.validate import validate_test_gold_alignment
 from evaluation.metrics import exact_match, token_f1
+from utils.table import linearize_table
+from models.answer_type_tapas import AnswerTypeTapas
 
 
-def normalize_answer(ans):
+def normalize(ans):
     ans = ans.lower().strip()
     ans = ans.replace(",", "").replace("$", "").replace("%", "")
     ans = re.sub(r"\s+", " ", ans)
     return ans
 
 
-# --------------------
-# Device
-# --------------------
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# --------------------
-# Load trained model
-# --------------------
 tokenizer = AutoTokenizer.from_pretrained("stage2_model")
 model = AutoModelForSeq2SeqLM.from_pretrained("stage2_model").to(device)
 model.eval()
 
-# --------------------
-# Load test data
-# --------------------
+type_model = AnswerTypeTapas()
+
 test = load_tatqa(
     "../TAT-QA/dataset_raw/tatqa_dataset_test.json",
     split="test"
@@ -38,7 +33,7 @@ with open("../TAT-QA/dataset_raw/tatqa_dataset_test_gold.json") as f:
     gold_raw = json.load(f)
 
 gold = {
-    q["uid"]: normalize_answer(str(q["answer"]))
+    q["uid"]: normalize(str(q["answer"]))
     for item in gold_raw
     for q in item["questions"]
 }
@@ -56,11 +51,9 @@ for ex in test:
     table = ex["table"]
     gold_ans = gold[ex["uid"]]
 
-    table_text = " ; ".join(
-        [f"row{i}: " + " | ".join(map(str, row))
-         for i, row in enumerate(table[:5])]
-    )
+    ans_type = type_model.predict(question, table)
 
+    table_text = linearize_table(table)
     input_text = f"question: {question} table: {table_text}"
 
     enc = tokenizer(
@@ -73,12 +66,13 @@ for ex in test:
     with torch.no_grad():
         output_ids = model.generate(
             **enc,
-            max_length=64,
-            num_beams=4
+            max_length=32 if ans_type == "NUMBER" else 64,
+            num_beams=5,
+            no_repeat_ngram_size=3,
+            early_stopping=True
         )
 
-    pred = tokenizer.decode(output_ids[0], skip_special_tokens=True)
-    pred = normalize_answer(pred)
+    pred = normalize(tokenizer.decode(output_ids[0], skip_special_tokens=True))
 
     em += exact_match(pred, gold_ans)
     f1 += token_f1(pred, gold_ans)
