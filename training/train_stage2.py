@@ -12,21 +12,20 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
 # --------------------
-# Tokenizers (DO NOT MIX THESE)
+# Single tokenizer (T5 only)
 # --------------------
-bert_tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-t5_tokenizer = AutoTokenizer.from_pretrained("t5-base")
+tokenizer = AutoTokenizer.from_pretrained("t5-base")
 
 # --------------------
-# Sketch model (BERT – frozen)
+# Sketch model (T5 encoder + pooling, frozen)
 # --------------------
-sketch_model = SketchModel("bert-base-uncased").to(device)
+sketch_model = SketchModel("t5-base").to(device)
 sketch_model.eval()
 for p in sketch_model.parameters():
     p.requires_grad = False
 
 # --------------------
-# Generator model (T5-base)
+# Generator model (T5)
 # --------------------
 model = AutoModelForSeq2SeqLM.from_pretrained("t5-base").to(device)
 optimizer = AdamW(model.parameters(), lr=1e-5)
@@ -53,10 +52,9 @@ for epoch in range(EPOCHS):
         table = ex["table"]
         answer = str(ex["answer"])
 
-        # ---- Sketch encoding (BERT tokenizer ONLY)
-        # ---- Sketch encoding (BERT tokenizer!)
+        # ---- Sketch encoding (T5 encoder)
         with torch.no_grad():
-            enc_q = bert_tokenizer(
+            enc_q = tokenizer(
                 question,
                 return_tensors="pt",
                 truncation=True,
@@ -69,28 +67,26 @@ for epoch in range(EPOCHS):
             )
 
         # ---- Table linearization
-        table_text = " ".join(
-            [" ".join(map(str, row)) for row in table[:5]]
+        table_text = " ; ".join(
+            [" | ".join(map(str, row)) for row in table[:5]]
         )
 
         input_text = f"question: {question} table: {table_text}"
 
-        # ---- T5 encoding
-        enc = t5_tokenizer(
+        enc = tokenizer(
             input_text,
             return_tensors="pt",
             truncation=True,
             max_length=384
         ).to(device)
 
-        labels = t5_tokenizer(
+        labels = tokenizer(
             answer,
             return_tensors="pt",
             truncation=True,
             max_length=64
         ).input_ids.to(device)
 
-        # ---- Forward + backward
         outputs = model(
             input_ids=enc["input_ids"],
             attention_mask=enc["attention_mask"],
@@ -110,5 +106,5 @@ for epoch in range(EPOCHS):
 # Save model
 # --------------------
 model.save_pretrained("stage2_model")
-t5_tokenizer.save_pretrained("stage2_model")
-print("Stage-2 model saved")
+tokenizer.save_pretrained("stage2_model")
+print("Stage‑2 model saved")
