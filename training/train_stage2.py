@@ -1,9 +1,10 @@
-import os
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-
 import torch
 from torch.optim import AdamW
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from transformers import (
+    AutoTokenizer,
+    AutoModelForSeq2SeqLM
+)
+
 from models.sketch_model import SketchModel
 from data.load_tatqa import load_tatqa
 
@@ -14,26 +15,29 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
 # --------------------
-# Load latent sketch model (FROZEN)
+# Tokenizers (IMPORTANT: SEPARATE)
 # --------------------
-sketch_model = SketchModel().to(device)
-sketch_model.eval()
+bert_tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+t5_tokenizer = AutoTokenizer.from_pretrained("t5-large")
 
+# --------------------
+# Latent sketch model (FROZEN)
+# --------------------
+sketch_model = SketchModel("bert-base-uncased").to(device)
+sketch_model.eval()
 for p in sketch_model.parameters():
     p.requires_grad = False
 
 # --------------------
-# Base model (MEDIUM level, GPU‑safe)
+# Base model (T5)
 # --------------------
-MODEL_NAME = "t5-base"
-
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+MODEL_NAME = "t5-large"  # switch to t5-base if OOM
 model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME).to(device)
 
 optimizer = AdamW(model.parameters(), lr=1e-5)
 
 # --------------------
-# Load TAT-QA data (Colab path)
+# Load data
 # --------------------
 train_data = load_tatqa(
     "../TAT-QA/dataset_raw/tatqa_dataset_train.json",
@@ -49,14 +53,14 @@ EPOCHS = 2
 for epoch in range(EPOCHS):
     total_loss = 0.0
 
-    for ex in train_data[:100]:  # keep small for Colab demo
+    for ex in train_data[:100]:  # small for Colab
         question = ex["question"]
         table = ex["table"]
         answer = str(ex["answer"])
 
-        # ---- Latent sketch embedding (NO ops, NO rules)
+        # ---- Sketch embedding (BERT tokenizer!)
         with torch.no_grad():
-            enc_q = tokenizer(
+            enc_q = bert_tokenizer(
                 question,
                 return_tensors="pt",
                 truncation=True,
@@ -65,9 +69,9 @@ for epoch in range(EPOCHS):
 
             sketch_vec = sketch_model(**enc_q)
 
-        # ---- Convert table → text
-        table_text = " ; ".join(
-            [" | ".join(map(str, row)) for row in table[:5]]
+        # ---- Table → text
+        table_text = " ".join(
+            [" ".join(map(str, row)) for row in table[:5]]
         )
 
         input_text = (
@@ -75,20 +79,19 @@ for epoch in range(EPOCHS):
             f"table: {table_text}"
         )
 
-        enc = tokenizer(
+        enc = t5_tokenizer(
             input_text,
             return_tensors="pt",
             truncation=True,
             max_length=384
         ).to(device)
 
-        labels = tokenizer(
+        labels = t5_tokenizer(
             answer,
             return_tensors="pt",
             truncation=True
         ).input_ids.to(device)
 
-        # ---- Forward + loss
         outputs = model(**enc, labels=labels)
         loss = outputs.loss
 
@@ -101,8 +104,8 @@ for epoch in range(EPOCHS):
     print(f"Epoch {epoch + 1} | Loss: {total_loss:.3f}")
 
 # --------------------
-# Save model (local only)
+# Save model
 # --------------------
 model.save_pretrained("stage2_model")
-tokenizer.save_pretrained("stage2_model")
+t5_tokenizer.save_pretrained("stage2_model")
 print("Stage‑2 model saved")
