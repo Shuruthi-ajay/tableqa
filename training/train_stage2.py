@@ -16,8 +16,7 @@ print("Using device:", device)
 tokenizer = AutoTokenizer.from_pretrained("t5-base")
 
 # --------------------
-# Sketch model (T5 encoder + pooling, frozen)
-# NOTE: computed but NOT injected (kept for architecture completeness)
+# Sketch model (NOT injected, frozen)
 # --------------------
 sketch_model = SketchModel("t5-base").to(device)
 sketch_model.eval()
@@ -43,16 +42,17 @@ train_data = load_tatqa(
 # --------------------
 model.train()
 EPOCHS = 5
+MAX_SAMPLES = 2000  # increase data
 
 for epoch in range(EPOCHS):
     total_loss = 0.0
 
-    for ex in train_data[:500]:
+    for ex in train_data[:MAX_SAMPLES]:
         question = ex["question"]
         table = ex["table"]
         answer = str(ex["answer"])
 
-        # ---- (Optional) sketch encoding (NOT used further)
+        # ---- Optional sketch encoding (NOT used)
         with torch.no_grad():
             enc_q = tokenizer(
                 question,
@@ -72,11 +72,7 @@ for epoch in range(EPOCHS):
              for i, row in enumerate(table[:5])]
         )
 
-        # ---- CLEAN input (NO sketch text, NO duplication)
-        input_text = (
-            f"question: {question} "
-            f"table: {table_text}"
-        )
+        input_text = f"question: {question} table: {table_text}"
 
         enc = tokenizer(
             input_text,
@@ -93,10 +89,9 @@ for epoch in range(EPOCHS):
             max_length=64
         ).input_ids.to(device)
 
-        # ---- Mask padding tokens
+        # mask padding
         labels[labels == tokenizer.pad_token_id] = -100
 
-        # ---- Forward + backward
         outputs = model(
             input_ids=enc["input_ids"],
             attention_mask=enc["attention_mask"],
@@ -110,7 +105,7 @@ for epoch in range(EPOCHS):
 
         total_loss += loss.item()
 
-    avg_loss = total_loss / len(train_data[:500])
+    avg_loss = total_loss / min(len(train_data), MAX_SAMPLES)
     print(f"Epoch {epoch + 1} | Avg Loss: {avg_loss:.4f}")
 
 # --------------------
