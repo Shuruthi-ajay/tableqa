@@ -28,7 +28,7 @@ model.eval()
 # Load dev data
 # --------------------
 data = load_tatqa(
-    "TAT-QA/dataset_raw/tatqa_dataset_dev.json",
+    "../TAT-QA/dataset_raw/tatqa_dataset_dev.json",
     split="dev"
 )
 

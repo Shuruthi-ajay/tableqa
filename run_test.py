@@ -30,11 +30,11 @@ model.eval()
 # Load test data
 # --------------------
 test = load_tatqa(
-    "TAT-QA/dataset_raw/tatqa_dataset_test.json",
+    "../TAT-QA/dataset_raw/tatqa_dataset_test.json",
     split="test"
 )
 
-with open("TAT-QA/dataset_raw/tatqa_dataset_test_gold.json") as f:
+with open("../TAT-QA/dataset_raw/tatqa_dataset_test_gold.json") as f:
     gold_raw = json.load(f)
 
 gold = {
