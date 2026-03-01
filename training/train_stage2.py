@@ -11,12 +11,12 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
 # --------------------
-# Tokenizer (ONE tokenizer)
+# Tokenizer (T5 only)
 # --------------------
-t5_tokenizer = AutoTokenizer.from_pretrained("t5-base")
+tokenizer = AutoTokenizer.from_pretrained("t5-base")
 
 # --------------------
-# Sketch model (T5 encoder)
+# Sketch model (T5 encoder + pooling, frozen)
 # --------------------
 sketch_model = SketchModel("t5-base").to(device)
 sketch_model.eval()
@@ -27,7 +27,7 @@ for p in sketch_model.parameters():
 # Generator model
 # --------------------
 model = AutoModelForSeq2SeqLM.from_pretrained("t5-base").to(device)
-optimizer = AdamW(model.parameters(), lr=1e-5)
+optimizer = AdamW(model.parameters(), lr=5e-6)
 
 # --------------------
 # Load data
@@ -41,19 +41,19 @@ train_data = load_tatqa(
 # Training
 # --------------------
 model.train()
-EPOCHS = 2
+EPOCHS = 5   # ⬅ increased
 
 for epoch in range(EPOCHS):
     total_loss = 0.0
 
-    for ex in train_data[:100]:
+    for ex in train_data[:500]:   # ⬅ more data if possible
         question = ex["question"]
         table = ex["table"]
         answer = str(ex["answer"])
 
         # ---- Sketch encoding (T5 encoder)
         with torch.no_grad():
-            enc_q = t5_tokenizer(
+            enc_q = tokenizer(
                 question,
                 return_tensors="pt",
                 truncation=True,
@@ -65,26 +65,36 @@ for epoch in range(EPOCHS):
                 attention_mask=enc_q["attention_mask"]
             )
 
-        # ---- Table linearization
-        table_text = " ".join(
-            [" ".join(map(str, row)) for row in table[:5]]
+        # ---- BETTER table linearization
+        table_text = " ; ".join(
+            [f"row{i}: " + " | ".join(map(str, row))
+             for i, row in enumerate(table[:5])]
         )
 
-        input_text = f"question: {question} table: {table_text}"
+        # ---- SOFT SKETCH INJECTION (key change)
+        input_text = (
+            f"sketch: {question} "
+            f"question: {question} "
+            f"table: {table_text}"
+        )
 
-        enc = t5_tokenizer(
+        enc = tokenizer(
             input_text,
             return_tensors="pt",
             truncation=True,
             max_length=384
         ).to(device)
 
-        labels = t5_tokenizer(
+        labels = tokenizer(
             answer,
             return_tensors="pt",
             truncation=True,
+            padding="max_length",
             max_length=64
         ).input_ids.to(device)
+
+        # ---- mask padding (VERY important)
+        labels[labels == tokenizer.pad_token_id] = -100
 
         outputs = model(
             input_ids=enc["input_ids"],
@@ -99,11 +109,11 @@ for epoch in range(EPOCHS):
 
         total_loss += loss.item()
 
-    print(f"Epoch {epoch+1} | Loss: {total_loss:.3f}")
+    print(f"Epoch {epoch+1} | Loss: {total_loss:.2f}")
 
 # --------------------
 # Save model
 # --------------------
 model.save_pretrained("stage2_model")
-t5_tokenizer.save_pretrained("stage2_model")
-print("Stage-2 model saved")
+tokenizer.save_pretrained("stage2_model")
+print("Stage‑2 model saved")
